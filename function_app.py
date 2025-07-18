@@ -1,11 +1,9 @@
-
-
-
-
-
-
-
-
+"""
+function_app.py
+----------------
+This Azure Function App exposes an MCP tool trigger to list Jenkins jobs from a specified Jenkins server.
+It supports optional filtering by job name. The function uses HTTP Basic Auth with credentials from environment variables.
+"""
 
 import json
 import logging
@@ -16,15 +14,17 @@ import azure.functions as func
 # Create the MCP FunctionApp instance with HTTP authentication level set to FUNCTION
 app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
 
-# Define property names for Jenkins tool triggers
-_JENKINS_SERVER_PROPERTY = "jenkinsServerFQDN"  # Jenkins server FQDN property key
-_SEARCH_STRING_PROPERTY = "searchString"         # Optional search string property key
+# Property keys for Jenkins tool triggers
+_JENKINS_SERVER_PROPERTY = "jenkinsServerFQDN"  # Jenkins server FQDN property key (required)
+_SEARCH_STRING_PROPERTY = "searchString"         # Optional search string property key for filtering jobs
 
-# ToolProperty class is used to describe the properties required by the MCP tool
 class ToolProperty:
+    """
+    Describes a property required by an MCP tool, including its name, type, and description.
+    """
     def __init__(self, property_name: str, property_type: str, description: str):
         self.propertyName = property_name  # Name of the property
-        self.propertyType = property_type  # Data type of the property
+        self.propertyType = property_type  # Data type of the property (e.g., 'string')
         self.description = description     # Description of the property
 
     def to_dict(self):
@@ -39,7 +39,7 @@ class ToolProperty:
 
 # List of properties required for the list_jenkins_jobs tool
 tool_properties_list_jobs = [
-    ToolProperty(_JENKINS_SERVER_PROPERTY, "string", "The FQDN of the Jenkins server."),
+    ToolProperty(_JENKINS_SERVER_PROPERTY, "string", "The FQDN of the Jenkins server (e.g., 'jenkins.example.com')."),
     ToolProperty(_SEARCH_STRING_PROPERTY, "string", "Optional: Filter jobs by name containing this string."),
 ]
 # Serialize the tool properties to JSON for use in the trigger definition
@@ -48,11 +48,12 @@ tool_properties_list_jobs_json = json.dumps([prop.to_dict() for prop in tool_pro
 def get_jenkins_token():
     """
     Retrieve Jenkins API token and username from environment variables.
-    For production, consider using Azure Key Vault or Managed Identity for better security.
     Returns:
         tuple: (username, token)
     Raises:
         Exception: If the token is not found in environment variables.
+    Note:
+        For production, consider using Azure Key Vault or Managed Identity for better security.
     """
     token = os.environ.get("Token")
     if not token:
@@ -85,7 +86,7 @@ def get_jenkins_jobs(jenkins_fqdn, search_string=None):
         response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
         jobs = response.json().get("jobs", [])
-        # Filter jobs by search_string if provided
+        # If a search string is provided, filter jobs by name
         if search_string:
             jobs = [job for job in jobs if search_string.lower() in job["name"].lower()]
         return {"jobs": jobs}
@@ -98,16 +99,18 @@ def get_jenkins_jobs(jenkins_fqdn, search_string=None):
     arg_name="context",
     type="mcpToolTrigger",
     toolName="list_jenkins_jobs",
-    description="List Jenkins jobs, optionally filtered by name.",
+    description="List Jenkins jobs, optionally filtered by name. This trigger allows you to query a Jenkins server for all jobs, or filter by a substring in the job name.",
     toolProperties=tool_properties_list_jobs_json,
 )
 def list_jenkins_jobs(context) -> str:
     """
     MCP tool function to list Jenkins jobs via HTTP API.
     Args:
-        context (str): The trigger context containing arguments as a JSON string.
+        context (str): The trigger context containing arguments as a JSON string. Should include 'jenkinsServerFQDN' and optionally 'searchString'.
     Returns:
         str: JSON string of jobs or error message.
+    Example context:
+        '{"arguments": {"jenkinsServerFQDN": "jenkins.example.com", "searchString": "pipeline"}}'
     """
     try:
         # Parse the context to extract arguments
