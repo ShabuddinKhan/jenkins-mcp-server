@@ -40,16 +40,20 @@ def get_jenkins_token():
     if not token:
         logging.error("Jenkins API token not found in environment variables.")
         raise Exception("Jenkins API token not configured.")
-    return token
+    username = os.environ.get("JENKINS_USER")
+    return username, token
 
 def get_jenkins_jobs(jenkins_fqdn, search_string=None):
     """
     Call Jenkins API to list jobs, optionally filtering by name.
     """
-    token = get_jenkins_token()
+    import base64
+    username, token = get_jenkins_token()
+    userpass = f"{username}:{token}"
+    b64_userpass = base64.b64encode(userpass.encode()).decode()
     url = f"https://{jenkins_fqdn}/api/json?tree=jobs[name,url]"
     headers = {
-        "Authorization": f"Basic {token}",
+        "Authorization": f"Basic {b64_userpass}",
         "Content-Type": "application/json"
     }
     try:
